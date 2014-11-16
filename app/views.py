@@ -30,7 +30,34 @@ class UserAPI(Resource):
             Updates the user information
             TODO: TODO.
         """
-        pass
+
+
+        args = self.reqparse.parse_args()
+
+        print "ARGUMENTS ------------------"
+        print args
+
+        u = models.User.query.get(int(id))
+
+        if not u:
+            return abort(404)
+
+        if args['name']:
+            u.nickname = args['name']
+        if args['note']:
+            u.note = args['note']
+        if args['lat']:
+            u.lat = args['lat']
+        if args['lon']:
+            u.lon = args['lon']
+
+        #db.session.add(u)
+        db.session.commit()
+
+        return u.id, 201
+
+
+
 
     def post(self):
         """

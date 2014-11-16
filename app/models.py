@@ -3,8 +3,8 @@ from app import db
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
 
-    nickname = db.Column(db.String(64), index=True, unique=True)
-    note = db.Column(db.String(160), index=True, unique=True)
+    nickname = db.Column(db.String(64), index=True)
+    note = db.Column(db.String(160), index=True)
 
     lat = db.Column(db.Float)
     lon = db.Column(db.Float)
