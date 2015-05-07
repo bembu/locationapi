@@ -13,10 +13,17 @@ class UserAPI(Resource):
         self.reqparse.add_argument('lon', type = float)
         super(UserAPI, self).__init__()
 
-    def get(self, id):
+    def get(self, id=None):
         """
             Returns user info.
         """
+
+        if not id:
+            users = models.User.query.all()
+            if users:
+                return jsonify(users = [u.as_dict() for u in users])
+            else:
+                return "No users found. Please create a user first.", 404
 
         u = models.User.query.get(int(id))
 
@@ -98,7 +105,7 @@ class LocationAPI(Resource):
         users = models.User.query.all()
 
         if users:
-            return jsonify(json_list = [u.as_dict() for u in users])
+            return jsonify(locations = [u.as_dict() for u in users])
 
 
     def post(self, x, y):
