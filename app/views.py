@@ -7,8 +7,8 @@ class UserAPI(Resource):
 
     def __init__(self):
         self.reqparse = reqparse.RequestParser()
-        self.reqparse.add_argument('name', type = str)
-        self.reqparse.add_argument('note', type = str)
+        self.reqparse.add_argument('name', type = unicode)
+        self.reqparse.add_argument('note', type = unicode)
         self.reqparse.add_argument('lat', type = float)
         self.reqparse.add_argument('lon', type = float)
         super(UserAPI, self).__init__()
