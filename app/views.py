@@ -25,12 +25,11 @@ class UserAPI(Resource):
 
         return jsonify(u.as_dict())
 
+
     def put(self, id):
         """
             Updates the user information
-            TODO: TODO.
         """
-
 
         args = self.reqparse.parse_args()
 
@@ -55,8 +54,6 @@ class UserAPI(Resource):
         db.session.commit()
 
         return u.id, 201
-
-
 
 
     def post(self):
@@ -88,8 +85,8 @@ class UserAPI(Resource):
         return abort(404)
 
 
-
 class LocationAPI(Resource):
+
     def get(self):
         """
             Returns a list of the nearby user id's according to given location
@@ -103,22 +100,23 @@ class LocationAPI(Resource):
         if users:
             return jsonify(json_list = [u.as_dict() for u in users])
 
+
     def post(self, x, y):
         """
             Updates the signed in user's location.
         """
         pass
 
+
 class AuthenticationAPI(Resource):
     """
         Handles the user authentication.
-        TODO!
     """
     def get(self):
         return {'token': 'X12391239ushda9dajq19qWFQ")#hw2l3ihtw283rhf'}
 
 
 # API routes here
-api.add_resource(UserAPI, '/user/<int:id>', '/user/')
+api.add_resource(UserAPI, '/users/<int:id>', '/users/')
 api.add_resource(LocationAPI, '/location/<int:x>/<int:y>', '/location')
 api.add_resource(AuthenticationAPI, '/auth')
