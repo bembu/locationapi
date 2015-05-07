@@ -41,3 +41,13 @@ Please follow the next installation steps in order to get it working nicely in a
     - in Postman create a POST request with a parameter (form-data) Key:name, Value:Jonathan
     - if successful, the API returns success and the ID of the created user
     - now go fetch the user data in JSON format from http://localhost:5000/user/1 - it works!
+
+## Heroku Deployment
+
+Use a command line for this.
+A good guide can be found [here](http://blog.miguelgrinberg.com/post/the-flask-mega-tutorial-part-xviii-deployment-on-the-heroku-cloud)
+
+- Login to Heroku with `heroku login`
+- `git push heroku master` to update the remote in Heroku
+- `git run init` to init the database
+- `git run upgrade` to upgrade the database
