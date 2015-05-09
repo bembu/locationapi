@@ -1,41 +1,92 @@
-from flask import Flask, jsonify, abort, g
-from flask.ext.restful import Api, Resource, reqparse
-from flask.ext.login import login_user, logout_user, current_user, login_required
+from flask import Flask, jsonify, abort, g, request
+from flask.ext.restful import Api, Resource, reqparse, marshal, fields
+#from flask.ext.login import login_user, logout_user, current_user, login_required
 from app import api, models, db, lm, app
+from sqlalchemy.exc import IntegrityError
 
 # TODO:
 # - Do we need to replace the @login_required decorator with a custom one,
 #   that checks the token given as a paramter?
 
-@app.before_request
-def before_request():
-    g.user = current_user
+def authorized(fn):
+    """
+    This decorator checks that an authorization token is found
+    from the request headers, and fetches a user corresponding the token.
+
+    Usage:
+
+    @authorized
+    def secured_root(userid=None):
+        pass
+
+    """
+
+    def _wrap(*args, **kwargs):
+        # 'Authorization'
+        if 'token' not in request.headers:
+            # 'token' not found in headers
+            abort(401)
+            return None
+
+        token = request.headers["token"]
+        u = models.User.verify_auth_token(token)
+
+        if u:
+            return fn(user=u, *args, **kwargs)
+
+        # wrong token
+        abort(401)
+        return None
+
+    return _wrap
 
 @lm.user_loader
 def load_user(id):
     return models.User.query.get(int(id))
 
+
+
+
 # API views here
 class UserAPI(Resource):
 
     def __init__(self):
+
         self.reqparse = reqparse.RequestParser()
         self.reqparse.add_argument('name', type = unicode)
         self.reqparse.add_argument('note', type = unicode)
         self.reqparse.add_argument('lat', type = float)
         self.reqparse.add_argument('lon', type = float)
+        self.reqparse.add_argument('email', type = unicode)
+        self.reqparse.add_argument('password', type = unicode)
+
+        self.allowed_user_fields = {
+            'name': fields.String,
+            'note': fields.String,
+            'lat': fields.Float,
+            'lon': fields.Float,
+            'id' : fields.Integer
+        }
+
+
         super(UserAPI, self).__init__()
 
-    @login_required
-    def get(self, id=None):
+    @authorized
+    def get(self, id=None, user=None):
         """
             Returns user info.
+
+            @param user : current user
+            @param id   : id of the queried user
+
         """
 
+        # TODO: this is for debugging. remove this.
         if not id:
             users = models.User.query.all()
             if users:
-                return jsonify(users = [u.as_dict() for u in users])
+                #return jsonify(users = [u.as_dict() for u in users])
+                return marshal(users, self.allowed_user_fields), 200
             else:
                 return "No users found. Please create a user first.", 404
 
@@ -44,10 +95,11 @@ class UserAPI(Resource):
         if not u:
             return abort(404)
 
-        return jsonify(u.as_dict())
+        #return jsonify(u.as_dict())
+        return marshal(u, self.allowed_user_fields), 200
 
-    @login_required
-    def put(self, id):
+    @authorized
+    def put(self, id, user=None):
         """
             Updates the user information
         """
@@ -55,9 +107,6 @@ class UserAPI(Resource):
         # TODO: check that the modified user is the same as the logged in user
 
         args = self.reqparse.parse_args()
-
-        print "ARGUMENTS ------------------"
-        print args
 
         u = models.User.query.get(int(id))
 
@@ -86,19 +135,27 @@ class UserAPI(Resource):
 
         args = self.reqparse.parse_args()
 
-        u = models.User(nickname=args['name'], lat=args['lat'], lon=args['lon'], note=args['note'])
-        db.session.add(u)
-        db.session.commit()
+        if not (("password" in args) and ("email" in args)):
+            return "Password and username required", 400
+
+        try:
+            u = models.User(nickname=args['name'], lat=args['lat'], lon=args['lon'], note=args['note'], email=args['email'])
+            u.set_pw_hash(args['password'])
+
+            db.session.add(u)
+            db.session.commit()
+        except IntegrityError:
+            return {"message" : "This email address is already registered."}, 409
 
         return u.id, 201
 
-    @login_required
-    def delete(self, id):
+    @authorized
+    def delete(self, id, user=None):
         """
             Deletes the user profile from the database.
         """
 
-        # TODO: check that the user is an admin OR owner
+        # TODO: check that the user is owner
 
         u = models.User.query.get(id)
         if u:
@@ -109,9 +166,17 @@ class UserAPI(Resource):
 
 
 class LocationAPI(Resource):
+    def __init__(self):
+        self.reqparse = reqparse.RequestParser()
+        self.reqparse.add_argument('lat', type = float)
+        self.reqparse.add_argument('lon', type = float)
 
-    @login_required
-    def get(self):
+        super(LocationAPI, self).__init__()
+
+    ## TODO: update to user marshal isntead of u.as_dict!
+
+    @authorized
+    def get(self, user=None):
         """
             Returns a list of the nearby user id's according to given location
             the distance defaults to 1000 meters . (?dist=1000)
@@ -124,56 +189,80 @@ class LocationAPI(Resource):
         if users:
             return jsonify(locations = [u.as_dict() for u in users])
 
-    @login_required
-    def post(self, x, y):
+    @authorized
+    def post(self, user=None):
         """
             Updates the signed in user's location.
         """
-        pass
+        if user:
+            args = self.reqparse.parse_args()
 
+            if args['lat']:
+                user.lat = args['lat']
+            if args['lon']:
+                user.lat = args['lon']
 
-class LogoutAPI(Resource):
+            db.session.commit()
 
-    def get(self):
-        logout_user()
-        return "Successfully logged out.", 200
+            return {"status": "Successfully updated location"}, 200
+
 
 class LoginAPI(Resource):
 
     def __init__(self):
         self.reqparse = reqparse.RequestParser()
-        # UNICODE?
-        #self.reqparse.add_argument('username', type = unicode)
-        #self.reqparse.add_argument('password', type = unicode)
         self.reqparse.add_argument('token', type = unicode)
+        self.reqparse.add_argument('email', type = unicode)
+        self.reqparse.add_argument('password', type = unicode)
+
         super(LoginAPI, self).__init__()
 
-    @login_required
-    def get(self):
+    @authorized
+    def get(self, user=None):
         # TODO: get the token of the logged in user's ID
 
-        token = models.User.query.get(1).generate_auth_token()
-        return {'token': token}, 200
+        if user:
+            token = user.generate_auth_token()
+            return {'token': token}, 200
+        else:
+            return "Error!", 400
 
     def post(self):
-        #TODO: check for username / password validity
+
+        # This should be done over HTTPS!
 
         args = self.reqparse.parse_args()
 
-        #TEMP, replace with password authentication
-        token = args["token"]
-        user = models.User.verify_auth_token(token)
+        # try token-based authentication first
+        if args["token"]:
+            token = args["token"]
 
-        if user:
-            login_user(user)
-            g.user = user
-            #TODO: replace the ID
-            return models.User.query.get(1).generate_auth_token(), 200
+            # get the user from the token
+            u = models.User.verify_auth_token(token)
 
-        return "Login was not successful", 400
+            if u:
+                return {'token': u.generate_auth_token()}, 200
+            else:
+                return "Authentication was not successful", 400
 
-# API routes here
+        # try email/password authentication
+        elif args["email"] and args["password"]:
+            email = args["email"]
+            password = args["password"]
+
+            u = models.User.query.filter_by(email=email).first()
+
+            if u:
+                if  u.check_pw_hash(password):
+                    return {'token': u.generate_auth_token()}, 200
+                else:
+                    return "Authentication was not successful", 400
+
+        return "Not enough parameters given", 400
+
+
+
+## API routes here ##
 api.add_resource(UserAPI, '/users/<int:id>', '/users/')
-api.add_resource(LocationAPI, '/location/<int:x>/<int:y>', '/location')
+#api.add_resource(LocationAPI, '/location/<int:x>/<int:y>', '/location')
 api.add_resource(LoginAPI, '/login')
-api.add_resource(LogoutAPI, '/logout')

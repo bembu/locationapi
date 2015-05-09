@@ -2,11 +2,17 @@ from app import db, app
 from itsdangerous import (TimedJSONWebSignatureSerializer as Serializer,
                           BadSignature, SignatureExpired)
 
+from werkzeug.security import generate_password_hash, \
+     check_password_hash
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
 
     nickname = db.Column(db.String(64), index=True)
     note = db.Column(db.String(160), index=True)
+
+    email = db.Column(db.String(120), unique=True)
+    pw_hash = db.Column(db.String(100))  # is the length always 66?
 
     lat = db.Column(db.Float)
     lon = db.Column(db.Float)
@@ -18,18 +24,12 @@ class User(db.Model):
     def as_dict(self):
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
-    ## for login handling ##
-    def is_authenticated(self):
-        return True
+    ## for password hashing ##
+    def set_pw_hash(self, password):
+        self.pw_hash = generate_password_hash(password)
 
-    def is_active(self):
-        return True
-
-    def is_anonymous(self):
-        return False
-
-    def get_id(self):
-        return unicode(self.id)
+    def check_pw_hash(self, password):
+        return check_password_hash(self.pw_hash, password)
 
     ## functions for authentication ##
     def generate_auth_token(self, expiration = 600):
