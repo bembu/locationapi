@@ -1,6 +1,19 @@
-from flask import Flask, jsonify, abort
+from flask import Flask, jsonify, abort, g
 from flask.ext.restful import Api, Resource, reqparse
-from app import api, models, db
+from flask.ext.login import login_user, logout_user, current_user, login_required
+from app import api, models, db, lm, app
+
+# TODO:
+# - Do we need to replace the @login_required decorator with a custom one,
+#   that checks the token given as a paramter?
+
+@app.before_request
+def before_request():
+    g.user = current_user
+
+@lm.user_loader
+def load_user(id):
+    return models.User.query.get(int(id))
 
 # API views here
 class UserAPI(Resource):
@@ -13,6 +26,7 @@ class UserAPI(Resource):
         self.reqparse.add_argument('lon', type = float)
         super(UserAPI, self).__init__()
 
+    @login_required
     def get(self, id=None):
         """
             Returns user info.
@@ -32,11 +46,13 @@ class UserAPI(Resource):
 
         return jsonify(u.as_dict())
 
-
+    @login_required
     def put(self, id):
         """
             Updates the user information
         """
+
+        # TODO: check that the modified user is the same as the logged in user
 
         args = self.reqparse.parse_args()
 
@@ -70,19 +86,19 @@ class UserAPI(Resource):
 
         args = self.reqparse.parse_args()
 
-        print "ARGUMENTS ------------------"
-        print args['note']
-
         u = models.User(nickname=args['name'], lat=args['lat'], lon=args['lon'], note=args['note'])
         db.session.add(u)
         db.session.commit()
 
         return u.id, 201
 
+    @login_required
     def delete(self, id):
         """
             Deletes the user profile from the database.
         """
+
+        # TODO: check that the user is an admin OR owner
 
         u = models.User.query.get(id)
         if u:
@@ -94,6 +110,7 @@ class UserAPI(Resource):
 
 class LocationAPI(Resource):
 
+    @login_required
     def get(self):
         """
             Returns a list of the nearby user id's according to given location
@@ -107,7 +124,7 @@ class LocationAPI(Resource):
         if users:
             return jsonify(locations = [u.as_dict() for u in users])
 
-
+    @login_required
     def post(self, x, y):
         """
             Updates the signed in user's location.
@@ -115,15 +132,48 @@ class LocationAPI(Resource):
         pass
 
 
-class AuthenticationAPI(Resource):
-    """
-        Handles the user authentication.
-    """
-    def get(self):
-        return {'token': 'X12391239ushda9dajq19qWFQ")#hw2l3ihtw283rhf'}
+class LogoutAPI(Resource):
 
+    def get(self):
+        logout_user()
+        return "Successfully logged out.", 200
+
+class LoginAPI(Resource):
+
+    def __init__(self):
+        self.reqparse = reqparse.RequestParser()
+        # UNICODE?
+        #self.reqparse.add_argument('username', type = unicode)
+        #self.reqparse.add_argument('password', type = unicode)
+        self.reqparse.add_argument('token', type = unicode)
+        super(LoginAPI, self).__init__()
+
+    @login_required
+    def get(self):
+        # TODO: get the token of the logged in user's ID
+
+        token = models.User.query.get(1).generate_auth_token()
+        return {'token': token}, 200
+
+    def post(self):
+        #TODO: check for username / password validity
+
+        args = self.reqparse.parse_args()
+
+        #TEMP, replace with password authentication
+        token = args["token"]
+        user = models.User.verify_auth_token(token)
+
+        if user:
+            login_user(user)
+            g.user = user
+            #TODO: replace the ID
+            return models.User.query.get(1).generate_auth_token(), 200
+
+        return "Login was not successful", 400
 
 # API routes here
 api.add_resource(UserAPI, '/users/<int:id>', '/users/')
 api.add_resource(LocationAPI, '/location/<int:x>/<int:y>', '/location')
-api.add_resource(AuthenticationAPI, '/auth')
+api.add_resource(LoginAPI, '/login')
+api.add_resource(LogoutAPI, '/logout')
