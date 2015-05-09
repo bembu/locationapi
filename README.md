@@ -1,5 +1,7 @@
 # Location API
 
+Location API is a Flask app, that provides a simple API to store and query user locations via an authenticated RESTful API.
+
 ## Installing the backend locally for development
 
 The Backend uses Python 2.7.x and Flask for providing the API to store data to a database.
